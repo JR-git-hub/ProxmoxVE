@@ -22,13 +22,13 @@ mkdir -p /etc/pihole
 touch /etc/pihole/pihole.toml
 $STD bash <(curl -fsSL https://install.pi-hole.net) --unattended
 sed -i -E '
-/^\s*upstreams =/ s|=.*|= ["8.8.8.8", "8.8.4.4"]|
+/^\s*upstreams =/ s|=.*|= ["9.9.9.9", "149.112.112.112"]|
 /^\s*interface =/ s|=.*|= "eth0"|
 /^\s*queryLogging =/ s|=.*|= true|
 /^\s*size =/ s|=.*|= 10000|
 /^\s*active =/ s|=.*|= true|
 /^\s*listeningMode =/ s|=.*|= "LOCAL"|
-/^\s*port =/ s|=.*|= "80o,443os,[::]:80o,[::]:443os"|
+# /^\s*port =/ s|=.*|= "80o,443os,[::]:80o,[::]:443os"|
 /^\s*pwhash =/ s|=.*|= ""|
 
 # DHCP Disable
@@ -47,8 +47,8 @@ sed -i -E '
 ' /etc/pihole/pihole.toml
 
 cat <<EOF >/etc/dnsmasq.d/01-pihole.conf
-server=8.8.8.8
-server=8.8.4.4
+server=9.9.9.9
+server=149.112.112.112
 EOF
 $STD pihole-FTL --config ntp.sync.interval 0
 systemctl restart pihole-FTL.service
@@ -68,15 +68,19 @@ server:
   do-ip4: yes
   do-udp: yes
   do-tcp: yes
-  num-threads: 1
+  tls-ciphers: "TLS1.3"
+  tls-protocols: "TLS1.3"
+  num-threads: 2
   hide-identity: yes
   hide-version: yes
   harden-glue: yes
   harden-dnssec-stripped: yes
+  harden-dnssec-validation: yes
   harden-referral-path: yes
-  use-caps-for-id: no
-  harden-algo-downgrade: no
-  qname-minimisation: yes
+  use-caps-for-id: yes
+  harden-algo-downgrade: yes
+  harden-below-nxdomain: yes
+  qname-minimisation: strict
   aggressive-nsec: yes
   rrset-roundrobin: yes
   cache-min-ttl: 300
@@ -87,20 +91,31 @@ server:
   key-cache-slabs: 8
   serve-expired: yes
   serve-expired-ttl: 3600
+  serve-expired-ttl-reset: yes
   edns-buffer-size: 1232
+  do-not-query-localhost: no
   prefetch: yes
   prefetch-key: yes
-  target-fetch-policy: "3 2 1 1 1"
+  ignore-cd-flag: yes
+  trust-anchor-file: "/etc/unbound/root.key"
+  target-fetch-policy: "2 1 1 1 1"
   unwanted-reply-threshold: 10000000
   rrset-cache-size: 256m
   msg-cache-size: 128m
   so-rcvbuf: 1m
+  deny-any: yes
+  disable-id-checks: no
+  minimal-responses: yes
+  val-clean-additional: yes
   private-address: 192.168.0.0/16
   private-address: 169.254.0.0/16
   private-address: 172.16.0.0/12
   private-address: 10.0.0.0/8
-  private-address: fd00::/8
-  private-address: fe80::/10
+  private-domain: "local."
+  domain-insecure: "local."
+  ratelimit: 1000
+  ratelimit-slabs: 4
+  ratelimit-size: 4m
 EOF
   mkdir -p /etc/dnsmasq.d/
   cat <<EOF >/etc/dnsmasq.d/99-edns.conf
@@ -115,29 +130,17 @@ forward-zone:
   forward-tls-upstream: yes
   forward-first: no
 
-  forward-addr: 8.8.8.8@853#dns.google
-  forward-addr: 8.8.4.4@853#dns.google
-  forward-addr: 2001:4860:4860::8888@853#dns.google
-  forward-addr: 2001:4860:4860::8844@853#dns.google
-
-  #forward-addr: 1.1.1.1@853#cloudflare-dns.com
-  #forward-addr: 1.0.0.1@853#cloudflare-dns.com
-  #forward-addr: 2606:4700:4700::1111@853#cloudflare-dns.com
-  #forward-addr: 2606:4700:4700::1001@853#cloudflare-dns.com
-
   #forward-addr: 9.9.9.9@853#dns.quad9.net
   #forward-addr: 149.112.112.112@853#dns.quad9.net
-  #forward-addr: 2620:fe::fe@853#dns.quad9.net
-  #forward-addr: 2620:fe::9@853#dns.quad9.net
 EOF
   fi
   cat <<EOF >/etc/dnsmasq.d/01-pihole.conf
 server=127.0.0.1#5335
-server=8.8.8.8
-server=8.8.4.4
+server=9.9.9.9
+server=149.112.112.112
 EOF
 
-  sed -i -E '/^\s*upstreams\s*=\s*\[/,/^\s*\]/c\  upstreams = [\n    "127.0.0.1#5335",\n    "8.8.4.4"\n  ]' /etc/pihole/pihole.toml
+  sed -i -E '/^\s*upstreams\s*=\s*\[/,/^\s*\]/c\  upstreams = [\n    "127.0.0.1#5335",\n    "9.9.9.9"\n  ]' /etc/pihole/pihole.toml
   systemctl enable -q --now unbound
   systemctl restart pihole-FTL.service
   msg_ok "Installed Unbound"
